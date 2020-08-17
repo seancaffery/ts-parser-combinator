@@ -132,12 +132,12 @@ function anyChar(input: string): ParseResult<string> {
 }
 
 function quotedString(): StringParser {
-    const p = pred<StringParser, string>(anyChar, x => x != "\"")
+    const p = pred<StringParser, string>(anyChar, x => x != `"`)
     const parser = right<StringParser, Parser<string[]>, string, string[]>(
-        matchLiteral("\""),
+        matchLiteral(`"`),
         left(
             zeroOrMore<typeof p, string>(p),
-            matchLiteral("\"")
+            matchLiteral(`"`)
         )
     )
     const mapper = (x: string[]) => x.join("")
@@ -304,7 +304,7 @@ function isAlpha(s: string) {
 }());
 
 (function TestSingleElement() {
-    const result = singleElement()("<div class=\"float\"/>")
+    const result = singleElement()(`<div class="float"/>`)
 
     const element = result[0]?.result
     if (element?.name == "div") {
@@ -344,7 +344,7 @@ function isAlpha(s: string) {
 }());
 
 (function TestedQuotedString() {
-    const result = quotedString()("\"hello\"")
+    const result = quotedString()(`"hello"`)
 
     if (result[0]?.result == "hello") {
         console.log("OK")
