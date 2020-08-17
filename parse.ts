@@ -2,21 +2,21 @@ interface Err {
     error: string
 }
 
-interface Result<T, R> {
-    nextInput: T
-    result: R
+interface Result<T> {
+    nextInput: string
+    result: T
 }
 
-type ParseResult<T, R> = [Result<T, R>?, Err?]
+type ParseResult<T> = [Result<T>?, Err?]
 
-type Parser<T, R> = (input: string) => ParseResult<T, R>
+type Parser<T> = (input: string) => ParseResult<T>
 
 type Mapper<A, B> = (input: A) => B
 
 // Some type aliases to make function calls a bit clearer
 type StringTuple = [string, string]
-type StringParser = Parser<string, string>
-type ElementParser = Parser<string, XElement>
+type StringParser = Parser<string>
+type ElementParser = Parser<XElement>
 
 class XElement {
     name: string
@@ -29,7 +29,7 @@ class XElement {
     }
 }
 
-function map<P extends Parser<string, A>, F extends Mapper<A, B>, A, B>(parser: P, map_fn: F): Parser<string, B> {
+function map<P extends Parser<A>, F extends Mapper<A, B>, A, B>(parser: P, map_fn: F): Parser<B> {
     return function (input: string) {
         let res = parser(input)
         if (res[1] != undefined) {
@@ -40,7 +40,7 @@ function map<P extends Parser<string, A>, F extends Mapper<A, B>, A, B>(parser: 
     }
 }
 
-function pair<P1 extends Parser<string, R1>, P2 extends Parser<string, R2>, R1, R2>(parser1: P1, parser2: P2): Parser<string, [R1, R2]> {
+function pair<P1 extends Parser<R1>, P2 extends Parser<R2>, R1, R2>(parser1: P1, parser2: P2): Parser<[R1, R2]> {
     return function (input: string) {
         let result1 = parser1(input)
         if (result1[1] != undefined) {
@@ -56,19 +56,19 @@ function pair<P1 extends Parser<string, R1>, P2 extends Parser<string, R2>, R1, 
     }
 }
 
-function left<P1 extends Parser<string, A>, P2 extends Parser<string, B>, A, B>(parser1: P1, parser2: P2): Parser<string, A> {
+function left<P1 extends Parser<A>, P2 extends Parser<B>, A, B>(parser1: P1, parser2: P2): Parser<A> {
     let f = (r: [A, B]) => r[0]
     let parser = pair<P1, P2, A, B>(parser1, parser2)
     return map<typeof parser, typeof f, [A, B], A>(parser, f)
 }
 
-function right<P1 extends Parser<string, A>, P2 extends Parser<string, B>, A, B>(parser1: P1, parser2: P2): Parser<string, B> {
+function right<P1 extends Parser<A>, P2 extends Parser<B>, A, B>(parser1: P1, parser2: P2): Parser<B> {
     let f = (r: [A, B]) => r[1]
     let parser = pair<P1, P2, A, B>(parser1, parser2)
     return map<typeof parser, typeof f, [A, B], B>(parser, f)
 }
 
-function oneOrMore<P extends Parser<string, A>, A>(parser: P): Parser<string, A[]> {
+function oneOrMore<P extends Parser<A>, A>(parser: P): Parser<A[]> {
     return function (input: string) {
         const result = parser(input)
         if (result[1] != undefined) {
@@ -92,7 +92,7 @@ function oneOrMore<P extends Parser<string, A>, A>(parser: P): Parser<string, A[
     }
 }
 
-function zeroOrMore<P extends Parser<string, A>, A>(parser: P): Parser<string, A[]> {
+function zeroOrMore<P extends Parser<A>, A>(parser: P): Parser<A[]> {
     return function (input: string) {
         let results: A[] = []
         let nextInput = input
@@ -111,7 +111,7 @@ function zeroOrMore<P extends Parser<string, A>, A>(parser: P): Parser<string, A
     }
 }
 
-function pred<P extends Parser<string, A>, A>(parser: P, pred: (input: A) => boolean): Parser<string, A> {
+function pred<P extends Parser<A>, A>(parser: P, pred: (input: A) => boolean): Parser<A> {
     return function (input: string) {
         const result = parser(input)
         if (result[1] != undefined) {
@@ -124,7 +124,7 @@ function pred<P extends Parser<string, A>, A>(parser: P, pred: (input: A) => boo
     }
 }
 
-function anyChar(input: string): ParseResult<string, string> {
+function anyChar(input: string): ParseResult<string> {
     if (input.length > 0) {
         return [{ nextInput: input.substring(1), result: input[0] }]
     }
@@ -133,7 +133,7 @@ function anyChar(input: string): ParseResult<string, string> {
 
 function quotedString(): StringParser {
     const p = pred<StringParser, string>(anyChar, x => x != "\"")
-    const parser = right<StringParser, Parser<string, string[]>, string, string[]>(
+    const parser = right<StringParser, Parser<string[]>, string, string[]>(
         matchLiteral("\""),
         left(
             zeroOrMore<typeof p, string>(p),
@@ -141,7 +141,7 @@ function quotedString(): StringParser {
         )
     )
     const mapper = (x: string[]) => x.join("")
-    return map<Parser<string, string[]>, typeof mapper, string[], string>(
+    return map<Parser<string[]>, typeof mapper, string[], string>(
         parser,
         mapper
     )
@@ -151,23 +151,23 @@ function whitespaceChar(): StringParser {
     return pred(anyChar, input => input[0] == ' ' || input[0] == '\n')
 }
 
-function space0(): Parser<string, string[]> {
+function space0(): Parser<string[]> {
     return zeroOrMore(whitespaceChar())
 }
 
-function space1(): Parser<string, string[]> {
+function space1(): Parser<string[]> {
     return oneOrMore(whitespaceChar())
 }
 
-function attributePair(): Parser<string, StringTuple> {
+function attributePair(): Parser<StringTuple> {
     return pair(identifier, right<StringParser, StringParser, string, string>(matchLiteral("="), quotedString()))
 }
 
-function attributes(): Parser<string, StringTuple[]> {
-    return zeroOrMore(right<Parser<string, string[]>, Parser<string, [string, string]>, string[], [string, string]>(space1(), attributePair()))
+function attributes(): Parser<StringTuple[]> {
+    return zeroOrMore(right<Parser<string[]>, Parser<[string, string]>, string[], [string, string]>(space1(), attributePair()))
 }
 
-function elementStart(): Parser<string, [string, StringTuple[]]> {
+function elementStart(): Parser<[string, StringTuple[]]> {
     const attrs = attributes()
     return right(matchLiteral("<"), pair<typeof identifier, typeof attrs, string, StringTuple[]>(identifier, attrs))
 }
@@ -177,7 +177,7 @@ function openElement(): ElementParser {
         const [name, [...rest]] = input
         return new XElement(name, rest)
     }
-    const l = left<Parser<string, [string, StringTuple[]]>, StringParser, [string, StringTuple[]], string>(elementStart(), matchLiteral(">"))
+    const l = left<Parser<[string, StringTuple[]]>, StringParser, [string, StringTuple[]], string>(elementStart(), matchLiteral(">"))
     return map<typeof l, typeof f, [string, StringTuple[]], XElement>(
         l,
         f
@@ -189,7 +189,7 @@ function singleElement(): ElementParser {
         const [name, [...rest]] = input
         return new XElement(name, rest)
     }
-    const l = left<Parser<string, [string, StringTuple[]]>, StringParser, [string, StringTuple[]], string>(elementStart(), matchLiteral("/>"))
+    const l = left<Parser<[string, StringTuple[]]>, StringParser, [string, StringTuple[]], string>(elementStart(), matchLiteral("/>"))
     return map<typeof l, typeof f, [string, StringTuple[]], XElement>(
         l,
         f
@@ -218,7 +218,7 @@ function parentElement(): ElementParser {
         })
 }
 
-function andThen<P extends Parser<string, A>, NextP extends Parser<string, B>, F extends (input: A) => NextP, A, B>(parser: P, f: F): Parser<string, B> {
+function andThen<P extends Parser<A>, NextP extends Parser<B>, F extends (input: A) => NextP, A, B>(parser: P, f: F): Parser<B> {
     return function (input: string) {
         const result1 = parser(input)
         if (result1[1] != undefined) {
@@ -231,8 +231,8 @@ function andThen<P extends Parser<string, A>, NextP extends Parser<string, B>, F
 
 
 
-function whitespaceWrap<P extends Parser<string, A>, A>(parser: P): Parser<string, A> {
-    const l = left<Parser<string, A>, Parser<string, string[]>, A, string[]>(parser, space0())
+function whitespaceWrap<P extends Parser<A>, A>(parser: P): Parser<A> {
+    const l = left<Parser<A>, Parser<string[]>, A, string[]>(parser, space0())
     return right(space0(), l)
 }
 
@@ -240,7 +240,7 @@ function element(): ElementParser {
     return whitespaceWrap<ElementParser, XElement>(either(singleElement(), parentElement()))
 }
 
-function either<P1 extends Parser<string, A>, P2 extends Parser<string, A>, A>(parser1: P1, parser2: P2): Parser<string, A> {
+function either<P1 extends Parser<A>, P2 extends Parser<A>, A>(parser1: P1, parser2: P2): Parser<A> {
     return function (input: string) {
         const result1 = parser1(input)
         if (result1[1] != undefined) {
@@ -250,8 +250,8 @@ function either<P1 extends Parser<string, A>, P2 extends Parser<string, A>, A>(p
     }
 }
 
-function matchLiteral<T extends string>(expected: string): (input: T) => ParseResult<string, string> {
-    return function (s: T): ParseResult<string, string> {
+function matchLiteral<T extends string>(expected: string): (input: T) => ParseResult<string> {
+    return function (s: T): ParseResult<string> {
         if (s.startsWith(expected)) {
             return [{ nextInput: s.substring(expected.length, s.length), result: "" }]
         }
@@ -259,7 +259,7 @@ function matchLiteral<T extends string>(expected: string): (input: T) => ParseRe
     }
 }
 
-function identifier(input: string): ParseResult<string, string> {
+function identifier(input: string): ParseResult<string> {
     let matched: string = "";
 
     for (const char of input) {
