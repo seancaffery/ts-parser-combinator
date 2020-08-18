@@ -1,0 +1,25 @@
+{
+  "name": "ts-parser-combinator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "parse.js",
+  "dependencies": {
+    "typescript": "^3.9.7",
+    "tslint": "^6.1.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "compile": "tsc",
+    "parse": "node parse.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seancaffery/ts-parser-combinator.git"
+  },
+  "author": "Sean Caffery",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/seancaffery/ts-parser-combinator/issues"
+  },
+  "homepage": "https://github.com/seancaffery/ts-parser-combinator#readme"
+}
