@@ -132,7 +132,7 @@ function anyChar(input: string): ParseResult<string> {
 }
 
 function quotedString(): StringParser {
-    const p = pred<StringParser, string>(anyChar, x => x != `"`)
+    const p = pred(anyChar, (x: string) => x != `"`)
     const parser = right<StringParser, Parser<string[]>, string, string[]>(
         matchLiteral(`"`),
         left(
