@@ -35,7 +35,7 @@ function map<P extends Parser<A>, F extends Mapper<A, B>, A, B>(parser: P, map_f
     return function (input: string) {
         let res = parser(input)
         if (!res.success) {
-            return { success: false, error: `bad: ${JSON.stringify(res)}` }
+            return { success: false, error: res.error }
         }
 
         return { nextInput: res.nextInput, result: map_fn(res.result), success: true }
@@ -46,12 +46,12 @@ function pair<P1 extends Parser<R1>, P2 extends Parser<R2>, R1, R2>(parser1: P1,
     return function (input: string) {
         let result1 = parser1(input)
         if (!result1.success) {
-            return { success: false, error: `bad: ${JSON.stringify(result1)}` }
+            return { success: false, error: result1.error }
         }
 
         let result2 = parser2(result1.nextInput)
         if (!result2.success) {
-            return { success: false, error: `bad: ${JSON.stringify(result2)}` }
+            return { success: false, error: result2.error }
         }
 
         return { nextInput: result2.nextInput, result: [result1.result, result2.result], success: true }
@@ -117,7 +117,7 @@ function pred<P extends Parser<A>, A>(parser: P, pred: (input: A) => boolean): P
     return function (input: string) {
         const result = parser(input)
         if (!result.success) {
-            return { success: false, error: `bad: ${JSON.stringify(result)}` }
+            return { success: false, error: result.error }
         }
         if (pred(result.result)) {
             return { nextInput: result.nextInput, result: result.result, success: true }
