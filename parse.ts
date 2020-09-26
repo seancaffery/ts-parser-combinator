@@ -1,13 +1,15 @@
-interface Err {
+type Err = {
+    success: false
     error: string
 }
 
-interface Result<T> {
+type Result<T> = {
+    success: true
     nextInput: string
     result: T
 }
 
-type ParseResult<T> = [Result<T>?, Err?]
+type ParseResult<T> = Result<T> | Err
 
 type Parser<T> = (input: string) => ParseResult<T>
 
@@ -32,27 +34,27 @@ class XElement {
 function map<P extends Parser<A>, F extends Mapper<A, B>, A, B>(parser: P, map_fn: F): Parser<B> {
     return function (input: string) {
         let res = parser(input)
-        if (res[1] != undefined) {
-            return [undefined, { error: `bad: ${JSON.stringify(res[1])}` }]
+        if (!res.success) {
+            return { success: false, error: `bad: ${JSON.stringify(res)}` }
         }
 
-        return [{ nextInput: res[0]!.nextInput, result: map_fn(res[0]!.result) }]
+        return { nextInput: res.nextInput, result: map_fn(res.result), success: true }
     }
 }
 
 function pair<P1 extends Parser<R1>, P2 extends Parser<R2>, R1, R2>(parser1: P1, parser2: P2): Parser<[R1, R2]> {
     return function (input: string) {
         let result1 = parser1(input)
-        if (result1[1] != undefined) {
-            return [undefined, { error: `bad: ${JSON.stringify(result1[1])}` }]
+        if (!result1.success) {
+            return { success: false, error: `bad: ${JSON.stringify(result1)}` }
         }
 
-        let result2 = parser2(result1[0]!.nextInput)
-        if (result2[1] != undefined) {
-            return [undefined, { error: `bad: ${JSON.stringify(result2[1])}` }]
+        let result2 = parser2(result1.nextInput)
+        if (!result2.success) {
+            return { success: false, error: `bad: ${JSON.stringify(result2)}` }
         }
 
-        return [{ nextInput: result2[0]!.nextInput, result: [result1[0]!.result, result2[0]!.result] }]
+        return { nextInput: result2.nextInput, result: [result1.result, result2.result], success: true }
     }
 }
 
@@ -71,24 +73,24 @@ function right<P1 extends Parser<A>, P2 extends Parser<B>, A, B>(parser1: P1, pa
 function oneOrMore<P extends Parser<A>, A>(parser: P): Parser<A[]> {
     return function (input: string) {
         const result = parser(input)
-        if (result[1] != undefined) {
-            return [undefined, { error: `'${input}' not matched` }]
+        if (!result.success) {
+            return { success: false, error: `'${input}' not matched` }
         }
         let results: A[] = []
-        let nextInput = result[0]!.nextInput
-        results.push(result[0]!.result)
+        let nextInput = result.nextInput
+        results.push(result.result)
 
         while (true) {
             const result = parser(nextInput)
-            if (result[1] != undefined) {
+            if (!result.success) {
                 break
             }
-            nextInput = result[0]!.nextInput
+            nextInput = result.nextInput
             input = nextInput
-            results.push(result[0]!.result)
+            results.push(result.result)
         }
 
-        return [{ nextInput: nextInput, result: results }]
+        return { nextInput: nextInput, result: results, success: true }
     }
 }
 
@@ -99,36 +101,36 @@ function zeroOrMore<P extends Parser<A>, A>(parser: P): Parser<A[]> {
 
         while (true) {
             const result = parser(nextInput)
-            if (result[1] != undefined) {
+            if (!result.success) {
                 break
             }
-            nextInput = result[0]!.nextInput
+            nextInput = result.nextInput
             input = nextInput
-            results.push(result[0]!.result)
+            results.push(result.result)
         }
 
-        return [{ nextInput: nextInput, result: results }]
+        return { nextInput: nextInput, result: results, success: true }
     }
 }
 
 function pred<P extends Parser<A>, A>(parser: P, pred: (input: A) => boolean): Parser<A> {
     return function (input: string) {
         const result = parser(input)
-        if (result[1] != undefined) {
-            return [undefined, { error: `bad: ${JSON.stringify(result[1])}` }]
+        if (!result.success) {
+            return { success: false, error: `bad: ${JSON.stringify(result)}` }
         }
-        if (pred(result[0]!.result)) {
-            return [{ nextInput: result[0]!.nextInput, result: result[0]!.result }]
+        if (pred(result.result)) {
+            return { nextInput: result.nextInput, result: result.result, success: true }
         }
-        return [undefined, { error: input }]
+        return { success: false, error: input }
     }
 }
 
 function anyChar(input: string): ParseResult<string> {
     if (input.length > 0) {
-        return [{ nextInput: input.substring(1), result: input[0] }]
+        return { nextInput: input.substring(1), result: input[0], success: true }
     }
-    return [undefined, { error: input }]
+    return { success: false, error: input }
 }
 
 function quotedString(): StringParser {
@@ -221,11 +223,11 @@ function parentElement(): ElementParser {
 function andThen<P extends Parser<A>, NextP extends Parser<B>, F extends (input: A) => NextP, A, B>(parser: P, f: F): Parser<B> {
     return function (input: string) {
         const result1 = parser(input)
-        if (result1[1] != undefined) {
-            return [undefined, result1[1]]
+        if (!result1.success) {
+            return result1
         }
-        const next = f(result1[0]!.result)
-        return next(result1[0]!.nextInput)
+        const next = f(result1.result)
+        return next(result1.nextInput)
     }
 }
 
@@ -243,7 +245,7 @@ function element(): ElementParser {
 function either<P1 extends Parser<A>, P2 extends Parser<A>, A>(parser1: P1, parser2: P2): Parser<A> {
     return function (input: string) {
         const result1 = parser1(input)
-        if (result1[1] != undefined) {
+        if (!result1.success) {
             return parser2(input)
         }
         return result1
@@ -253,9 +255,9 @@ function either<P1 extends Parser<A>, P2 extends Parser<A>, A>(parser1: P1, pars
 function matchLiteral<T extends string>(expected: string): (input: T) => ParseResult<string> {
     return function (s: T): ParseResult<string> {
         if (s.startsWith(expected)) {
-            return [{ nextInput: s.substring(expected.length, s.length), result: "" }]
+            return { nextInput: s.substring(expected.length, s.length), result: "", success: true }
         }
-        return [undefined, { error: "no match for: '" + expected + "' in: " + s }]
+        return { success: false, error: "no match for: '" + expected + "' in: " + s }
     }
 }
 
@@ -270,7 +272,7 @@ function identifier(input: string): ParseResult<string> {
         }
     }
 
-    return [{ nextInput: input.substring(input.length, matched.length), result: matched }]
+    return { nextInput: input.substring(input.length, matched.length), result: matched, success: true }
 }
 
 function isAlpha(s: string) {
@@ -306,7 +308,7 @@ function isAlpha(s: string) {
 (function TestSingleElement() {
     const result = singleElement()(`<div class="float"/>`)
 
-    const element = result[0]?.result
+    const element = (result as Result<XElement>).result
     if (element?.name == "div") {
         console.log("OK")
     } else {
@@ -323,9 +325,9 @@ function isAlpha(s: string) {
 }());
 
 (function TestAttriburePair() {
-    const result = attributePair()(`one="1"`)
+    const result = attributePair()(`one="1"`) as Result<StringTuple>
 
-    if (result[0]?.result[0] == "one" && result[0].result[1] == '1') {
+    if (result.result[0] == "one" && result.result[1] == '1') {
         console.log("OK")
     } else {
         console.log(result)
@@ -333,10 +335,10 @@ function isAlpha(s: string) {
 }());
 
 (function TestAttributeParser() {
-    const result = attributes()(` one="1" two="2"`)
-    const [first, second] = result[0]!.result
+    const result = attributes()(` one="1" two="2"`) as Result<StringTuple[]>
+    const [first, second] = result.result
 
-    if (result[0]?.result[0][0] == "one" && result[0].result[0][1] == "1") {
+    if (result.result[0][0] == "one" && result.result[0][1] == "1") {
         console.log("OK")
     } else {
         console.log(result)
@@ -344,9 +346,9 @@ function isAlpha(s: string) {
 }());
 
 (function TestedQuotedString() {
-    const result = quotedString()(`"hello"`)
+    const result = quotedString()(`"hello"`) as Result<string>
 
-    if (result[0]?.result == "hello") {
+    if (result.result == "hello") {
         console.log("OK")
     } else {
         console.log(result)
@@ -355,17 +357,17 @@ function isAlpha(s: string) {
 
 (function TestPred() {
     const predParser = pred<StringParser, string>(anyChar, x => x == 'o')
-    const result = predParser("omg")
+    const result = predParser("omg") as Result<string>
 
-    if (result[0]!.result === 'o' && result[0]!.nextInput == 'mg') {
+    if (result.result === 'o' && result.nextInput == 'mg') {
         console.log("OK")
     } else {
         console.log(result)
     }
 
-    const resultBorked = predParser("lol")
+    const resultBorked = predParser("lol") as Err
 
-    if (resultBorked[1]!.error === 'lol') {
+    if (resultBorked.error === 'lol') {
         console.log("OK")
     } else {
         console.log(resultBorked)
@@ -375,49 +377,49 @@ function isAlpha(s: string) {
 (function TestOneOrMore() {
     const literal = matchLiteral("ha")
     const parser = oneOrMore<typeof literal, string>(literal)
-    const result = parser("hahaha")
+    const result = parser("hahaha") as Result<string[]>
 
-    if (result[0]!.result.toString() === ['', '', ''].toString()) {
+    if (result.result.toString() === ['', '', ''].toString()) {
         console.log("OK")
     } else {
-        console.log(result[0]?.result)
+        console.log(result.result)
     }
 
-    const resultBorked = parser("ahaha")
-    if (resultBorked[1]!.error === `'ahaha' not matched`) {
+    const resultBorked = parser("ahaha") as Err
+    if (resultBorked.error === `'ahaha' not matched`) {
         console.log("OK")
     } else {
-        console.log(resultBorked[1]?.error)
+        console.log(resultBorked.error)
     }
 }());
 
 (function TestZeroOrMore() {
     const literal = matchLiteral("ha")
     const parser = zeroOrMore<typeof literal, string>(literal)
-    const result = parser("hahaha")
+    const result = parser("hahaha") as Result<string[]>
 
-    if (result[0]!.result.toString() === ['', '', ''].toString()) {
+    if (result.result.toString() === ['', '', ''].toString()) {
         console.log("OK")
     } else {
-        console.log(result[0]?.result)
+        console.log(result.result)
     }
 
-    const resultBorked = parser("ahaha")
-    if (resultBorked[0]!.result.toString() === [].toString()) {
+    const resultBorked = parser("ahaha") as Result<string[]>
+    if (resultBorked.result.toString() === [].toString()) {
         console.log("OK")
     } else {
-        console.log(resultBorked[0])
+        console.log(resultBorked)
     }
 }());
 
 (function TestLeft() {
     let p1 = identifier
     let p2 = matchLiteral(" literal")
-    let result = left<typeof p1, typeof p2, string, string>(p1, p2)("identifier literal")
+    let result = left<typeof p1, typeof p2, string, string>(p1, p2)("identifier literal") as Result<string>
 
     var mappedIdent = "identifier"
     var nextInput = ""
-    if (result[0]?.result == mappedIdent && result[0].nextInput == nextInput) {
+    if (result.result == mappedIdent && result.nextInput == nextInput) {
         console.log("OK")
     } else {
         console.log(result)
@@ -427,11 +429,11 @@ function isAlpha(s: string) {
 (function TestRight() {
     let p1 = matchLiteral("<")
     let p2 = identifier
-    let result = right<typeof p1, typeof p2, string, string>(p1, p2)("<identifier/>")
+    let result = right<typeof p1, typeof p2, string, string>(p1, p2)("<identifier/>") as Result<string>
 
     var mappedIdent = "identifier"
     var nextInput = "/>"
-    if (result[0]?.result == mappedIdent && result[0].nextInput == nextInput) {
+    if (result.result == mappedIdent && result.nextInput == nextInput) {
         console.log("OK")
     } else {
         console.log(result)
@@ -440,7 +442,7 @@ function isAlpha(s: string) {
 
 (function TestPair2() {
     let pairer = pair<StringParser, StringParser, string, string>(matchLiteral<string>("<"), identifier)
-    let result = pairer("<my-first-element/>")[0]
+    let result = pairer("<my-first-element/>") as Result<[string, string]>
 
     var mappedIdent = "my-first-element"
     var nextInput = "/>"
@@ -453,7 +455,7 @@ function isAlpha(s: string) {
 
 (function TestPair() {
     let pairer = pair<StringParser, StringParser, string, string>(identifier, matchLiteral<string>(" ext"))
-    let result = pairer("identifier extra")[0]
+    let result = pairer("identifier extra") as Result<[string, string]>
 
     var mappedIdent = "identifier"
     var nextInput = "ra"
@@ -466,7 +468,7 @@ function isAlpha(s: string) {
 
 (function TestMap() {
     let mapper = map(identifier, (input) => input + " map stuff")
-    let result = mapper("ident-ifier extra")[0]
+    let result = mapper("ident-ifier extra") as Result<string>
 
     var mappedIdent = "ident-ifier map stuff"
     var nextInput = " extra"
@@ -478,7 +480,7 @@ function isAlpha(s: string) {
 }());
 
 (function TestIdentifier() {
-    var result = identifier("abc-def asdf")[0]
+    var result = identifier("abc-def asdf") as Result<string>
 
     var ident = "abc-def"
     var next = " asdf"
@@ -492,7 +494,7 @@ function isAlpha(s: string) {
 (function TestMatchLiteral() {
     let parser = matchLiteral("Hello Joe")
 
-    let result = parser("Hello Joe")[0]
+    let result = parser("Hello Joe") as Result<string>
     let expected = { nextInput: "", result: "" }
     if (result?.nextInput == expected.nextInput) {
         console.log("OK")
@@ -500,7 +502,7 @@ function isAlpha(s: string) {
         console.log(result)
     }
 
-    result = parser("Hello Joe Hello Robert")[0]
+    result = parser("Hello Joe Hello Robert") as Result<string>
     expected = { nextInput: " Hello Robert", result: "" }
     if (result?.nextInput == expected.nextInput) {
         console.log("OK")
@@ -508,7 +510,7 @@ function isAlpha(s: string) {
         console.log(result)
     }
 
-    var err = parser("Hello Mike")[1]
+    var err = parser("Hello Mike") as Err
     var expectedErr = "no match for: 'Hello Joe' in: Hello Mike"
     if (err?.error == expectedErr) {
         console.log("OK")
